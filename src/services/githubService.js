@@ -1,13 +1,11 @@
-// src/services/githubService.js
 const axios = require('axios');
 const NodeCache = require('node-cache');
 const logger = require('../utils/logger');
 const checkRateLimit = require('../utils/rateLimitChecker');
+require('dotenv').config();
 
-// Initialize cache with a TTL of 1 hour
 const cache = new NodeCache({ stdTTL: 3600 });
 
-// Set up the GitHub API client
 const githubApi = axios.create({
   baseURL: 'https://api.github.com',
   headers: {
@@ -16,38 +14,62 @@ const githubApi = axios.create({
   }
 });
 
-// Retry mechanism
 async function retryApiCall(apiCall, maxRetries = 3) {
   for (let i = 0; i < maxRetries; i++) {
     try {
       return await apiCall();
     } catch (error) {
-      if (i === maxRetries - 1) throw error;
-      logger.warn(`API call failed, retrying (${i + 1}/${maxRetries}): ${error.message}`);
-      await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // Exponential backoff
+      if (i === maxRetries - 1) {
+        logger.error('API call failed after max retries', { 
+          error: error.toString(),
+          stack: error.stack,
+          response: error.response ? {
+            status: error.response.status,
+            data: error.response.data
+          } : null
+        });
+        throw error;
+      }
+      logger.warn(`API call failed, retrying (${i + 1}/${maxRetries})`, { 
+        error: error.toString(),
+        response: error.response ? {
+          status: error.response.status,
+          data: error.response.data
+        } : null
+      });
+      await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
     }
   }
 }
 
-// Fetch external contributions (repos that the user doesn't own)
+async function makeGithubApiCall(endpoint, params = {}) {
+  return retryApiCall(() => githubApi.get(endpoint, { params }));
+}
+
 async function getExternalContributions(username) {
   try {
-    const events = await retryApiCall(() => githubApi.get(`/users/${username}/events/public`));
+    const events = await makeGithubApiCall(`/users/${username}/events/public`);
     const externalContributions = events.data.filter(event => 
       (event.type === 'PushEvent' || event.type === 'PullRequestEvent') &&
       event.repo.name.split('/')[0] !== username
     );
     return externalContributions.length;
   } catch (error) {
-    logger.error(`Error fetching contributions for ${username}: ${error.message}`);
+    logger.error(`Error fetching contributions for ${username}`, { 
+      error: error.toString(),
+      stack: error.stack,
+      response: error.response ? {
+        status: error.response.status,
+        data: error.response.data
+      } : null
+    });
     return 0;
   }
 }
 
-// Fetch developer details
 async function getDeveloperDetails(username) {
   try {
-    const response = await retryApiCall(() => githubApi.get(`/users/${username}`));
+    const response = await makeGithubApiCall(`/users/${username}`);
     if (response && response.data) {
       return {
         login: username,
@@ -61,12 +83,18 @@ async function getDeveloperDetails(username) {
       return null;
     }
   } catch (error) {
-    logger.error(`Error fetching details for ${username}: ${error.message}`);
+    logger.error(`Error fetching details for ${username}`, { 
+      error: error.toString(),
+      stack: error.stack,
+      response: error.response ? {
+        status: error.response.status,
+        data: error.response.data
+      } : null
+    });
     return null;
   }
 }
 
-// Search for users with external contributions
 async function searchExternalContributors(page = 1, perPage = 10, filters = {}) {
   const isUnderRateLimit = await checkRateLimit();
   if (!isUnderRateLimit) {
@@ -96,15 +124,13 @@ async function searchExternalContributors(page = 1, perPage = 10, filters = {}) 
       });
     }
 
-    const response = await retryApiCall(() => githubApi.get('/search/users', {
-      params: { 
-        q: query,
-        sort: 'repositories', 
-        order: 'desc',
-        per_page: 100,
-        page: page
-      }
-    }));
+    const response = await makeGithubApiCall('/search/users', {
+      q: query,
+      sort: 'repositories', 
+      order: 'desc',
+      per_page: 100,
+      page: page
+    });
 
     const users = response.data.items;
     const contributors = await Promise.all(users.map(async (user) => {
@@ -139,7 +165,15 @@ async function searchExternalContributors(page = 1, perPage = 10, filters = {}) 
       created_at
     }));
   } catch (error) {
-    logger.error('Error searching external contributors:', error.message);
+    logger.error('Error searching external contributors', { 
+      error: error.toString(),
+      stack: error.stack,
+      response: error.response ? {
+        status: error.response.status,
+        data: error.response.data
+      } : null,
+      params: { page, perPage, filters }
+    });
     throw error;
   }
 }
@@ -148,4 +182,6 @@ module.exports = {
   searchExternalContributors,
   getExternalContributions,
   getDeveloperDetails,
+  makeGithubApiCall,
+  retryApiCall
 };

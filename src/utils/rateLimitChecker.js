@@ -1,8 +1,6 @@
-// src/utils/rateLimitChecker.js
 const axios = require('axios');
 const logger = require('./logger');
 
-// Function to check the current rate limit status
 async function checkRateLimit() {
   try {
     const response = await axios.get('https://api.github.com/rate_limit', {
@@ -16,7 +14,14 @@ async function checkRateLimit() {
     
     return core.remaining > 0;
   } catch (error) {
-    logger.error('Error checking rate limit:', error.message);
+    logger.error('Error checking rate limit', { 
+      error: error.toString(),
+      stack: error.stack,
+      response: error.response ? {
+        status: error.response.status,
+        data: error.response.data
+      } : null
+    });
     return false;
   }
 }
