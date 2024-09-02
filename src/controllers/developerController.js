@@ -1,11 +1,8 @@
-const express = require('express');
-const router = express.Router();
 const dashboardService = require('../services/dashboardService');
 const { searchExternalContributors } = require('../services/githubService');
 const logger = require('../utils/logger');
-const authenticateToken = require('../middleware/authMiddleware');
 
-router.post('/external-contributors', authenticateToken, async (req, res) => {
+exports.getExternalContributors = async (req, res) => {
   try {
     let { page = 1, perPage = 10, ...filters } = req.body;
     const contributors = await searchExternalContributors(page, perPage, filters);
@@ -25,9 +22,9 @@ router.post('/external-contributors', authenticateToken, async (req, res) => {
     });
     res.status(500).json({ error: 'An error occurred while fetching external contributors' });
   }
-});
+};
 
-router.get('/developer-profile/:username', authenticateToken, async (req, res) => {
+exports.getDeveloperProfile = async (req, res) => {
   try {
     const profile = await dashboardService.getDeveloperProfile(req.params.username);
     res.json(profile);
@@ -39,9 +36,9 @@ router.get('/developer-profile/:username', authenticateToken, async (req, res) =
     });
     res.status(500).json({ error: 'An error occurred while fetching the developer profile' });
   }
-});
+};
 
-router.get('/developer-repos/:username', authenticateToken, async (req, res) => {
+exports.getDeveloperRepos = async (req, res) => {
   try {
     const repos = await dashboardService.getDeveloperRepos(req.params.username);
     res.json(repos);
@@ -53,9 +50,9 @@ router.get('/developer-repos/:username', authenticateToken, async (req, res) => 
     });
     res.status(500).json({ error: 'An error occurred while fetching developer repositories' });
   }
-});
+};
 
-router.get('/developer-contributions/:username', authenticateToken, async (req, res) => {
+exports.getDeveloperContributions = async (req, res) => {
   try {
     const contributions = await dashboardService.getDeveloperContributions(req.params.username);
     res.json(contributions);
@@ -67,9 +64,9 @@ router.get('/developer-contributions/:username', authenticateToken, async (req, 
     });
     res.status(500).json({ error: 'An error occurred while fetching developer contributions' });
   }
-});
+};
 
-router.get('/repo-prs/:username/:owner/:repo', authenticateToken, async (req, res) => {
+exports.getRepoPRs = async (req, res) => {
   try {
     const { username, owner, repo } = req.params;
     const prs = await dashboardService.getRepoPRs(username, owner, repo);
@@ -84,6 +81,4 @@ router.get('/repo-prs/:username/:owner/:repo', authenticateToken, async (req, re
     });
     res.status(500).json({ error: 'An error occurred while fetching repository PRs' });
   }
-});
-
-module.exports = router;
+};

@@ -1,3 +1,5 @@
+// src/services/githubService.js
+
 const axios = require('axios');
 const NodeCache = require('node-cache');
 const logger = require('../utils/logger');
@@ -6,21 +8,36 @@ require('dotenv').config();
 
 const cache = new NodeCache({ stdTTL: 3600 });
 
+// const githubApi = axios.create({
+//   baseURL: 'https://api.github.com',
+//   headers: {
+//     'Accept': 'application/vnd.github.v3+json',
+//     'Authorization': `token ${process.env.GITHUB_TOKEN}`
+//   }
+// });
+
 const githubApi = axios.create({
-  baseURL: 'https://api.github.com',
-  headers: {
-    'Accept': 'application/vnd.github.v3+json',
-    'Authorization': `token ${process.env.GITHUB_TOKEN}`
-  }
-});
+    baseURL: 'https://api.github.com',
+    headers: {
+      'Accept': 'application/vnd.github.v3+json',
+      'Authorization': `token ${process.env.GITHUB_TOKEN}`
+    },
+  });
+  
 
 async function retryApiCall(apiCall, maxRetries = 3) {
   for (let i = 0; i < maxRetries; i++) {
     try {
-      return await apiCall();
+      const result = await apiCall();
+      
+      // Check the rate limit after each successful call
+      const remainingLimit = await checkRateLimit();
+      logger.info(`Remaining GitHub API Rate Limit: ${remainingLimit}`);
+
+      return result;
     } catch (error) {
       if (i === maxRetries - 1) {
-        logger.error('API call failed after max retries', { 
+        logger.error('API call failed after max retries', {
           error: error.toString(),
           stack: error.stack,
           response: error.response ? {
@@ -30,7 +47,7 @@ async function retryApiCall(apiCall, maxRetries = 3) {
         });
         throw error;
       }
-      logger.warn(`API call failed, retrying (${i + 1}/${maxRetries})`, { 
+      logger.warn(`API call failed, retrying (${i + 1}/${maxRetries})`, {
         error: error.toString(),
         response: error.response ? {
           status: error.response.status,
@@ -49,13 +66,13 @@ async function makeGithubApiCall(endpoint, params = {}) {
 async function getExternalContributions(username) {
   try {
     const events = await makeGithubApiCall(`/users/${username}/events/public`);
-    const externalContributions = events.data.filter(event => 
+    const externalContributions = events.data.filter(event =>
       (event.type === 'PushEvent' || event.type === 'PullRequestEvent') &&
       event.repo.name.split('/')[0] !== username
     );
     return externalContributions.length;
   } catch (error) {
-    logger.error(`Error fetching contributions for ${username}`, { 
+    logger.error(`Error fetching contributions for ${username}`, {
       error: error.toString(),
       stack: error.stack,
       response: error.response ? {
@@ -83,7 +100,7 @@ async function getDeveloperDetails(username) {
       return null;
     }
   } catch (error) {
-    logger.error(`Error fetching details for ${username}`, { 
+    logger.error(`Error fetching details for ${username}`, {
       error: error.toString(),
       stack: error.stack,
       response: error.response ? {
@@ -96,14 +113,19 @@ async function getDeveloperDetails(username) {
 }
 
 async function searchExternalContributors(page = 1, perPage = 10, filters = {}) {
-  const isUnderRateLimit = await checkRateLimit();
-  if (!isUnderRateLimit) {
-    throw new Error('Rate limit exceeded. Please try again later.');
+  const remainingLimit = await checkRateLimit();
+  if (remainingLimit === 0) {
+    const errorMessage = 'Rate limit exceeded. Please try again later.';
+    logger.error('Error searching external contributors', {
+      error: errorMessage,
+      params: { page, perPage, filters }
+    });
+    throw new Error(errorMessage);
   }
 
   const cacheKey = `external-contributors-${page}-${perPage}-${JSON.stringify(filters)}`;
   const cachedResult = cache.get(cacheKey);
-  
+
   if (cachedResult) {
     logger.info(`Returning cached result for page ${page} and perPage ${perPage}`);
     return cachedResult;
@@ -126,7 +148,7 @@ async function searchExternalContributors(page = 1, perPage = 10, filters = {}) 
 
     const response = await makeGithubApiCall('/search/users', {
       q: query,
-      sort: 'repositories', 
+      sort: 'repositories',
       order: 'desc',
       per_page: 100,
       page: page
@@ -165,7 +187,7 @@ async function searchExternalContributors(page = 1, perPage = 10, filters = {}) 
       created_at
     }));
   } catch (error) {
-    logger.error('Error searching external contributors', { 
+    logger.error('Error searching external contributors', {
       error: error.toString(),
       stack: error.stack,
       response: error.response ? {

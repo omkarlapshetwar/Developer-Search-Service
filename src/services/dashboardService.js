@@ -41,29 +41,39 @@ async function getDeveloperRepos(username) {
 }
 
 async function getDeveloperContributions(username) {
-  try {
-    const events = await makeGithubApiCall(`/users/${username}/events/public`);
-    const contributions = events.data
-      .filter(event => event.type === 'PullRequestEvent' && event.payload.action === 'opened')
-      .reduce((acc, event) => {
-        const repoName = event.repo.name;
-        if (!acc[repoName]) {
-          acc[repoName] = {
-            name: repoName,
-            count: 0,
-            html_url: `https://github.com/${repoName}`
-          };
-        }
-        acc[repoName].count++;
-        return acc;
-      }, {});
-    
-    return Object.values(contributions);
-  } catch (error) {
-    logger.error(`Error fetching contributions for ${username}`, { error: error.toString(), stack: error.stack });
-    throw error;
+    try {
+      // Get the user's events
+      const events = await makeGithubApiCall(`/users/${username}/events/public`);
+      
+      // Filter and aggregate contribution data
+      const contributions = events.data
+        .filter(event => 
+          event.type === 'PullRequestEvent' || 
+          event.type === 'IssuesEvent' || 
+          event.type === 'PushEvent'
+        )
+        .reduce((acc, event) => {
+          const repoName = event.repo.name;
+          if (!acc[repoName]) {
+            acc[repoName] = {
+              repo: repoName,
+              count: 0,
+              html_url: `https://github.com/${repoName}`
+            };
+          }
+          acc[repoName].count++;
+          return acc;
+        }, {});
+      
+      // Convert to array and sort by contribution count
+      return Object.values(contributions)
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10); // Limit to top 10 contributions
+    } catch (error) {
+      logger.error(`Error fetching contributions for ${username}`, { error: error.toString(), stack: error.stack });
+      throw error;
+    }
   }
-}
 
 async function getRepoPRs(username, owner, repo) {
   try {

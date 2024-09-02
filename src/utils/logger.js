@@ -1,5 +1,7 @@
 const { createLogger, format, transports } = require('winston');
 const { combine, timestamp, printf, colorize } = format;
+require('dotenv').config();
+
 
 const logFormat = printf(({ level, message, timestamp, ...metadata }) => {
   let msg = `${timestamp} [${level.toUpperCase()}]: ${message}`;

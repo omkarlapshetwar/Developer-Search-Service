@@ -1,5 +1,8 @@
+// src/utils/rateLimitChecker.js
+
 const axios = require('axios');
 const logger = require('./logger');
+require('dotenv').config();
 
 async function checkRateLimit() {
   try {
@@ -12,7 +15,7 @@ async function checkRateLimit() {
     const { core } = response.data.resources;
     logger.info(`Rate Limit - Limit: ${core.limit}, Used: ${core.used}, Remaining: ${core.remaining}, Reset: ${new Date(core.reset * 1000).toLocaleString()}`);
     
-    return core.remaining > 0;
+    return core.remaining;
   } catch (error) {
     logger.error('Error checking rate limit', { 
       error: error.toString(),
@@ -22,7 +25,7 @@ async function checkRateLimit() {
         data: error.response.data
       } : null
     });
-    return false;
+    return 0;
   }
 }
 
