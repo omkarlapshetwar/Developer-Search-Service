@@ -97,9 +97,102 @@ async function getRepoPRs(username, owner, repo) {
   }
 }
 
+
+async function getDeveloperStats(username) {
+    try {
+      const contributionsResponse = await makeGithubApiCall(`/users/${username}/events`);
+      const contributions = contributionsResponse.data.filter(event => 
+        event.type === 'PushEvent' || event.type === 'PullRequestEvent' || event.type === 'IssuesEvent'
+      );
+  
+      const totalContributions = contributions.length;
+      const longestStreak = calculateLongestStreak(contributions);
+      const contributionCalendar = generateContributionCalendar(contributions);
+      const averageCommitFrequency = calculateAverageCommitFrequency(contributions);
+      const codeReviewParticipation = calculateCodeReviewParticipation(contributions);
+      const pullRequestMergeRatio = calculatePullRequestMergeRatio(contributions);
+      const organizationsContributedTo = calculateOrganizationsContributedTo(contributions);
+      const openSourceProjectsContributedTo = calculateOpenSourceProjectsContributedTo(contributions);
+  
+      return {
+        totalContributions,
+        longestStreak,
+        contributionCalendar,
+        averageCommitFrequency,
+        codeReviewParticipation,
+        pullRequestMergeRatio,
+        organizationsContributedTo,
+        openSourceProjectsContributedTo
+      };
+    } catch (error) {
+      logger.error(`Error fetching stats for ${username}`, { error: error.toString(), stack: error.stack });
+      throw error;
+    }
+  }
+  
+  function calculateLongestStreak(contributions) {
+    // This is a basic implementation. You might want to improve it based on your specific requirements.
+    let currentStreak = 0;
+    let longestStreak = 0;
+    let lastContributionDate = null;
+  
+    contributions.forEach(contribution => {
+      const contributionDate = new Date(contribution.created_at).toDateString();
+      if (contributionDate === lastContributionDate) {
+        currentStreak++;
+      } else {
+        currentStreak = 1;
+      }
+      longestStreak = Math.max(longestStreak, currentStreak);
+      lastContributionDate = contributionDate;
+    });
+  
+    return longestStreak;
+  }
+  
+  function generateContributionCalendar(contributions) {
+    // This generates a simple calendar for the last 365 days
+    const calendar = [];
+    const today = new Date();
+    for (let i = 364; i >= 0; i--) {
+      const date = new Date(today.getTime() - i * 24 * 60 * 60 * 1000);
+      const dateString = date.toISOString().split('T')[0];
+      const value = contributions.filter(c => c.created_at.startsWith(dateString)).length;
+      calendar.push({ day: dateString, value });
+    }
+    return calendar;
+  }
+  
+  function calculateAverageCommitFrequency(contributions) {
+    const pushEvents = contributions.filter(c => c.type === 'PushEvent');
+    return pushEvents.length / 52; // Average per week over the last year
+  }
+  
+  function calculateCodeReviewParticipation(contributions) {
+    const reviewEvents = contributions.filter(c => c.type === 'PullRequestReviewEvent');
+    return (reviewEvents.length / contributions.length) * 100;
+  }
+  
+  function calculatePullRequestMergeRatio(contributions) {
+    const prEvents = contributions.filter(c => c.type === 'PullRequestEvent');
+    const mergedPRs = prEvents.filter(c => c.payload.action === 'closed' && c.payload.pull_request.merged);
+    return mergedPRs.length / prEvents.length;
+  }
+  
+  function calculateOrganizationsContributedTo(contributions) {
+    const orgs = new Set(contributions.map(c => c.org?.login).filter(Boolean));
+    return orgs.size;
+  }
+  
+  function calculateOpenSourceProjectsContributedTo(contributions) {
+    const repos = new Set(contributions.map(c => c.repo.name));
+    return repos.size;
+  }
+
 module.exports = {
   getDeveloperProfile,
   getDeveloperRepos,
   getDeveloperContributions,
-  getRepoPRs
+  getRepoPRs,
+  getDeveloperStats
 };

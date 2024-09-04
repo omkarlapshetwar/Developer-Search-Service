@@ -82,3 +82,17 @@ exports.getRepoPRs = async (req, res) => {
     res.status(500).json({ error: 'An error occurred while fetching repository PRs' });
   }
 };
+
+exports.getDeveloperStats = async (req, res) => {
+    try {
+      const stats = await dashboardService.getDeveloperStats(req.params.username);
+      res.json(stats);
+    } catch (error) {
+      logger.error('Error fetching developer stats', { 
+        error: error.toString(),
+        stack: error.stack,
+        username: req.params.username
+      });
+      res.status(500).json({ error: 'An error occurred while fetching developer stats' });
+    }
+  };
